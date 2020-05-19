@@ -20,7 +20,7 @@ def main():
 
 
 def handle_dialog(req, res):
-    user_id = req['session']['user_id']
+    user_id = req['session']['application_id']  # свойство user_id перестает поддерживаться
     if req['session']['new']:  # если пользователь новый
         sessionStorage[user_id] = {}
         res['response']['text'] = HELLO_MESSAGE
