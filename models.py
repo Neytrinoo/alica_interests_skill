@@ -16,7 +16,7 @@ class User(db.Model):
     name = db.Column(db.String(50))
     application_id = db.Column(db.String(100), unique=True)  # для того, чтобы не приходилось реализовывать регистрацию, будем запоминать айди приложения, с которого был запрос
     age = db.Column(db.String(3), default='Неизвестно')  # если захочет, пользователь может не указывать свой возраст
-    gender = db.Column(db.String(20))  # male, female, none
+    gender = db.Column(db.String(20))  # male, female
     # status_dialog = db.Column(db.String(30), default='not_in_dialog')  # not_in_dialog, in_dialog, search_dialog
     networks = db.Column(db.String(150))  # пользователь может оставить свои контакты
     about_me = db.Column(db.String(500))  # если захочет, пользователь может рассказать о себе
