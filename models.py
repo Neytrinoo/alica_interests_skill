@@ -28,6 +28,9 @@ class User(db.Model):
         if user not in self.sight_profiles:
             self.sight_profiles.append(user)
 
+    def __repr__(self):  # нужен для отображения анкет
+        pass
+
 
 class Interests(db.Model):
     id = db.Column(db.Integer, primary_key=True)

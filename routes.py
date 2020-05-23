@@ -98,8 +98,33 @@ def create_profile(req, res):
         db.session.commit()
         res['response']['text'] = AFTER_CREATED_PROFILE
         sessionStorage[application_id]['now_command'] = ['free_use']
-        sessionStorage[application_id]['create_profile'] = {}
+        del sessionStorage[application_id]['create_profile']
         return
+
+
+def get_profile_for_user(application_id, res):  # функция рекомендации анкеты пользователю
+    user = User.query.filter_by(application_id=application_id).first()
+    user_with_common_interests = set()  # таблица пользователей, с которыми совпали интересы
+    for interest in user.interests:
+        for us in interest.users:
+            if us.application_id != application_id and us not in user.sight_profiles:  # если это не тот же самый пользователь и мы его еще не рекомендовали данному user
+                user_with_common_interests.add(us)  # добавляем его в множество. использование множества исключает возможность дублирования пользователей
+    # сортируем найденных пользователей по совпадениям интересов с исходным user
+    user_with_common_interests = sorted(user_with_common_interests, key=lambda usr: set(usr.interests) & set(user.interests))
+    if user_with_common_interests:  # если вообще есть пользователи с общими интересами, берем наиболее подходящего
+        user_with_common_interests = user_with_common_interests[-1]
+    else:  # если нет, берем первого, которого еще не рекомендовали
+        for us in User.query.all():
+            if us not in user.sight_profiles:
+                user_with_common_interests = us
+                break
+        if not user_with_common_interests:  # если в бд нет подходящих пользователей, сообщаем об этом
+            res['response']['text'] = NOT_USER_TO_RECOMMENDATION
+            return
+    user.sight_profiles.append(user_with_common_interests)
+    db.session.commit()
+    res['response']['text'] = str(user_with_common_interests)
+    return
 
 
 def handle_dialog(req, res):
@@ -119,3 +144,7 @@ def handle_dialog(req, res):
     if sessionStorage[application_id]['now_command'][0] == 'create_profile':  # если пользователь находится на этапе создания анкеты
         create_profile(req, res)
         return
+    if sessionStorage[application_id]['now_command'][0] == 'free_use':  # тут осталось реализовать 2 функции: показ анкеты пользователю и редактирование анкеты
+        if 'покажи' in req['request']['nlu']['tokens'] and 'анкету' in req['request']['nlu']['tokens']:
+            get_profile_for_user(application_id, res)
+            return
