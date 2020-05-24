@@ -2,7 +2,7 @@ from flask_app import app
 from flask import request
 from models import *
 from constants import *
-from help_functions import search_numbers
+from help_functions import search_numbers, get_suggests, set_editable_fields
 from flask_app import db
 import logging
 import json
@@ -131,9 +131,13 @@ def edit_profile(req, res):
     user = User.query.filter_by(application_id=req['session']['application']['application_id']).first()
     if 'выйти' in req['request']['nlu']['tokens']:
         sessionStorage[user.application_id]['now_command'] = ['free_use']
+        sessionStorage[user.application_id]['suggests'] = ARRAY_OF_AVAILABLE_COMMANDS
+        res['response']['buttons'] = get_suggests(user.application_id)
         res['response']['text'] = 'Вы вышли из режима редактирования'
         return
     if sessionStorage[user.application_id]['now_command'][1] == 'none':  # если в данный момент пользователь выбирает, какое поле редактировать
+        sessionStorage[user.application_id]['suggests'] = []
+        res['response']['buttons'] = get_suggests(user.application_id)
         if 'имя' in req['request']['nlu']['tokens']:
             sessionStorage[user.application_id]['now_command'][1] = 'name'
             res['response']['text'] = 'Введите новое имя'
@@ -158,6 +162,10 @@ def edit_profile(req, res):
             sessionStorage[user.application_id]['now_command'][1] = 'interests'
             res['response']['text'] = 'Укажите новые интересы. Учтите, что все предыдущие интересы будут стерты'
             return
+        else:
+            res['response']['text'] = 'Такого поля не существует, повторите попытку'
+            set_editable_fields(user.application_id, res)
+            return
     else:
         field_to_edit = sessionStorage[user.application_id]['now_command'][1]
         if field_to_edit == 'name':
@@ -168,6 +176,7 @@ def edit_profile(req, res):
             db.session.commit()
             res['response']['text'] = 'Ваше имя успешно изменено. Вы можете продолжить редактировать другие поля, или выйти из режима редактирования'
             sessionStorage[user.application_id]['now_command'][1] = 'none'
+            set_editable_fields(user.application_id, res)
             return
         elif field_to_edit == 'age':
             age = search_numbers(req['request']['nlu']['entities'])
@@ -178,6 +187,7 @@ def edit_profile(req, res):
             db.session.commit()
             res['response']['text'] = 'Ваш возраст успешно изменен. Вы можете продолжить редактировать другие поля, или выйти из режима редактирования'
             sessionStorage[user.application_id]['now_command'][1] = 'none'
+            set_editable_fields(user.application_id, res)
             return
         elif field_to_edit == 'gender':
             if 'мужчина' not in req['request']['nlu']['tokens'] and 'женщина' not in req['request']['nlu']['tokens'] and 'мужской' not in req['request']['nlu'][
@@ -191,6 +201,7 @@ def edit_profile(req, res):
             db.session.commit()
             res['response']['text'] = 'Ваш пол успешно изменен. Вы можете продолжить редактировать другие поля, или выйти из режима редактирования'
             sessionStorage[user.application_id]['now_command'][1] = 'none'
+            set_editable_fields(user.application_id, res)
             return
         elif field_to_edit == 'networks':
             if len(req['request']['original_utterance']) > 150:
@@ -200,6 +211,7 @@ def edit_profile(req, res):
             db.session.commit()
             res['response']['text'] = 'Ваши контакты успешно изменены. Вы можете продолжить редактировать другие поля, или выйти из режима редактирования'
             sessionStorage[user.application_id]['now_command'][1] = 'none'
+            set_editable_fields(user.application_id, res)
             return
         elif field_to_edit == 'about_me':
             if len(req['request']['original_utterance']) > 500:
@@ -209,6 +221,7 @@ def edit_profile(req, res):
             db.session.commit()
             res['response']['text'] = 'Ваша информация о себе успешно изменена. Вы можете продолжить редактировать другие поля, или выйти из режима редактирования'
             sessionStorage[user.application_id]['now_command'][1] = 'none'
+            set_editable_fields(user.application_id, res)
             return
         elif field_to_edit == 'interests':
             interests = req['request']['original_utterance'].split(',')
@@ -231,13 +244,16 @@ def edit_profile(req, res):
             db.session.commit()
             res['response']['text'] = 'Ваши интересы успешно изменены. Вы можете продолжить редактировать другие поля, или выйти из режима редактирования'
             sessionStorage[user.application_id]['now_command'][1] = 'none'
+            set_editable_fields(user.application_id, res)
             return
 
 
 def handle_dialog(req, res):
     application_id = req['session']['application']['application_id']  # свойство user_id перестает поддерживаться
     if not User.query.filter_by(application_id=application_id).first() and application_id not in sessionStorage:  # если пользователь новый
+        sessionStorage[application_id]['suggests'] = ['Создай анкету']
         res['response']['text'] = HELLO_MESSAGE
+        res['response']['buttons'] = get_suggests(application_id)
         sessionStorage[application_id] = {'now_command': ['start']}
         return
     if User.query.filter_by(application_id=application_id).first() and application_id not in sessionStorage:
@@ -252,23 +268,43 @@ def handle_dialog(req, res):
         else:
             res['response']['text'] = COMMAND_NOT_ALLOWED
             return
+
     if sessionStorage[application_id]['now_command'][0] == 'create_profile':  # если пользователь находится на этапе создания анкеты
         create_profile(req, res)
         return
     if sessionStorage[application_id]['now_command'][0] == 'free_use':
-        if SHOW_RECOMMENDATION_PROFILE_COMMAND <= set(req['request']['nlu']['tokens']):  # показать рекомендованную анкету
+        sessionStorage[application_id]['suggests'] = ARRAY_OF_AVAILABLE_COMMANDS
+
+        if SHOW_RECOMMENDATION_PROFILE_COMMAND[0] <= set(req['request']['nlu']['tokens']) or SHOW_RECOMMENDATION_PROFILE_COMMAND[1] <= set(
+                req['request']['nlu']['tokens']):  # показать рекомендованную анкету
             get_profile_for_user(application_id, res)
+            res['response']['buttons'] = get_suggests(application_id)
             return
         elif SHOW_MY_PROFILE_COMMAND <= set(req['request']['nlu']['tokens']):  # показать анкету пользователя
             res['response']['text'] = str(User.query.filter_by(application_id=application_id).first())
+            res['response']['buttons'] = get_suggests(application_id)
             return
-        elif EDITING_PROFILE_COMMAND <= set(req['request']['nlu']['tokens']):  # заход в ветвь редактирования анкеты
+        elif EDITING_PROFILE_COMMAND[0] <= set(req['request']['nlu']['tokens']) or EDITING_PROFILE_COMMAND[1] <= set(req['request']['nlu']['tokens']) or EDITING_PROFILE_COMMAND[
+            2] <= set(req['request']['nlu']['tokens']) or EDITING_PROFILE_COMMAND[3] <= set(req['request']['nlu']['tokens']):  # заход в ветвь редактирования анкеты
             sessionStorage[application_id]['now_command'] = ['edit_profile', 'none']
             res['response']['text'] = AVAILABLE_FIELDS_FOR_EDITING
+            sessionStorage[application_id]['suggests'] = ['Выйти', 'Имя', 'Возраст', 'Пол', 'Контакты', 'Обо мне', 'Интересы']
+            res['response']['buttons'] = get_suggests(application_id)
+            return
+        elif 'помощь' in req['request']['nlu']['tokens'] or HELP_COMMAND <= set(req['request']['nlu']['tokens']):
+            res['response']['text'] = AVAILABLE_COMMANDS
+            sessionStorage[application_id]['suggests'] = ARRAY_OF_AVAILABLE_COMMANDS
+            res['response']['buttons'] = get_suggests(application_id)
             return
         else:
-            res['response']['text'] = 'Команда не распознана'
+            res['response']['text'] = COMMAND_NOT_ALLOWED
+            res['response']['buttons'] = get_suggests(application_id)
             return
     if sessionStorage[application_id]['now_command'][0] == 'edit_profile':
         edit_profile(req, res)
+        return
+    if 'помощь' in req['request']['nlu']['tokens'] or HELP_COMMAND <= set(req['request']['nlu']['tokens']):
+        res['response']['text'] = AVAILABLE_COMMANDS
+        sessionStorage[application_id]['suggests'] = ARRAY_OF_AVAILABLE_COMMANDS
+        res['response']['buttons'] = get_suggests(application_id)
         return
