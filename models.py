@@ -28,8 +28,18 @@ class User(db.Model):
         if user not in self.sight_profiles:
             self.sight_profiles.append(user)
 
-    def __repr__(self):  # нужен для отображения анкет
-        pass
+    def __str__(self):  # нужен для отображения анкет
+        if self.gender == 'male':
+            gen = 'мужской'
+        else:
+            gen = 'женский'
+        res = 'Имя: {}\n\nВозраст: {}\n\nПол: {}\n\nКонтакты:\n{}\n\nОбо мне:\n{}\n\nИнтересы: '.format(self.name, self.age, gen, self.networks, self.about_me)
+        for interest in self.interests:
+            if len(res) + len(interest.text) + 1 <= 1020:
+                res += interest.text + ','
+            else:
+                res = res[:-1] + '....'
+        return res[:-1]
 
 
 class Interests(db.Model):
